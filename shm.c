@@ -47,10 +47,6 @@ void sem_unlock(int sem_set_id, int sem_num) {
     semop(sem_set_id, &sem_op, 1);
 }
 
-
-int SHM_SIZE = 200 * 1000;
-
-
 struct shm_buf {
     int size;
     char *data;
@@ -58,6 +54,7 @@ struct shm_buf {
 
 
 int main(int argc, char* argv[]) {
+    int buf_size;
     int sem_id;
     union semun {
         int                 val;
@@ -74,13 +71,15 @@ int main(int argc, char* argv[]) {
     int n;
     struct shm_buf *buf;
 
-    if (argc != 3) {
-        printf("usage: ./shm <source_file> <target_file>\n");
+    if (argc != 4) {
+        printf("usage: ./shm.out <buf_size> <source_file> <target_file>\n");
         return 1;
     }
 
-    source_file = argv[1];
-    target_file = argv[2];
+    buf_size = atoi(argv[1]);
+    source_file = argv[2];
+    target_file = argv[3];
+    
 
     sem_id = semget(IPC_PRIVATE, 2, IPC_CREAT | 0600);
     // First is writeable, second is readable
@@ -101,7 +100,7 @@ int main(int argc, char* argv[]) {
         exit(1);
     }
 
-    shm_id = shmget(IPC_PRIVATE, SHM_SIZE + sizeof(int), IPC_CREAT | IPC_EXCL | 0600);
+    shm_id = shmget(IPC_PRIVATE, buf_size + sizeof(int), IPC_CREAT | IPC_EXCL | 0600);
     if (shm_id == -1) {
         perror("main: shmget: ");
         exit(1);
@@ -132,11 +131,10 @@ int main(int argc, char* argv[]) {
 
         while (1) {
             sem_lock(sem_id, 0); // Get write access, shmem is empty
-            n = fread(&(buf->data), 1, SHM_SIZE, source);
-            printf("%d\n", n);
+            n = fread(&(buf->data), 1, buf_size, source);
             buf->size = n;
             sem_unlock(sem_id, 1); // Give read access, shmem is full
-            if (n < SHM_SIZE) {
+            if (n < buf_size) {
                 break;
             }
         }
@@ -167,7 +165,7 @@ int main(int argc, char* argv[]) {
             n = buf->size;
             fflush(target);
             sem_unlock(sem_id, 0);
-            if (n < SHM_SIZE) {
+            if (n < buf_size) {
                 break;
             }
         }
